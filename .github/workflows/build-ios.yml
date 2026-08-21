@@ -38,7 +38,19 @@ jobs:
           cd ..
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.1.app
+        run: |
+          # Show available Xcode versions
+          ls /Applications/Xcode*.app 2>/dev/null || true
+          sudo xcode-select -s /Applications/Xcode_16.2.app
+          xcodebuild -version
+          xcodebuild -showsdks 2>/dev/null | head -20 || true
+
+      - name: Download iOS Platform
+        run: |
+          # Download the iOS platform for the selected Xcode
+          xcodebuild -downloadPlatform iOS || true
+          # Show installed platforms
+          xcodebuild -showPlatforms 2>/dev/null || true
 
       - name: Build
         run: |
