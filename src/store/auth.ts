@@ -1,5 +1,5 @@
 // ============================================================
-// Auth Store —— 多账号认证状态管理
+// Auth Store —— 短信验证码登录 + 多账号管理
 // ============================================================
 
 import { create } from 'zustand'
@@ -7,10 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { BambuRegion, BambuSession, BambuDevice, AccountId, AccountInfo, BambuUser } from '../shared/types'
 import {
   apiGetDeviceList,
-  apiGetProfile,
   postLogin,
   requestVerificationCode,
-  extractUidFromToken,
   buildSession,
   apiLogout
 } from '../api/cloud'
@@ -24,14 +22,13 @@ interface AuthState {
   error: string | null
 
   // 登录流程状态
-  loginStep: 'idle' | 'credentials' | 'verifyCode' | 'tfa'
+  loginStep: 'idle' | 'verifyCode'
   pendingAccount: string
-  pendingPassword: string
   pendingRegion: BambuRegion
   pendingChannel: 'email' | 'sms' | null
 
   // Actions
-  login: (account: string, password: string, region: BambuRegion) => Promise<void>
+  loginWithSms: (phone: string, region: BambuRegion) => Promise<void>
   submitCode: (code: string) => Promise<void>
   logout: (accountId?: AccountId) => Promise<void>
   removeAccount: (accountId: AccountId) => void
@@ -52,60 +49,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
   loginStep: 'idle',
   pendingAccount: '',
-  pendingPassword: '',
   pendingRegion: 'global',
   pendingChannel: null,
 
-  login: async (account, password, region) => {
+  loginWithSms: async (phone, region) => {
     set({ isLoading: true, error: null })
     try {
-      const resp = await postLogin(region, { account, password })
-
-      if (resp.loginType === 'verifyCode') {
-        const channel = await requestVerificationCode(region, account)
-        set({
-          isLoading: false,
-          loginStep: 'verifyCode',
-          pendingAccount: account,
-          pendingPassword: password,
-          pendingRegion: region,
-          pendingChannel: channel
-        })
-        return
-      }
-
-      if (resp.loginType === 'tfa') {
-        set({
-          isLoading: false,
-          loginStep: 'tfa',
-          pendingAccount: account,
-          pendingPassword: password,
-          pendingRegion: region
-        })
-        return
-      }
-
-      // 直接登录成功
-      const session = await buildSession(region, account, resp)
-      const devices = await apiGetDeviceList(session.accessToken, region)
-      const id = accountIdOf(session)
-
-      set((prev) => {
-        const existing = prev.accounts.findIndex((a) => a.accountId === id)
-        const nextAccounts = [...prev.accounts]
-        if (existing >= 0) {
-          nextAccounts[existing] = { accountId: id, session, devices }
-        } else {
-          nextAccounts.push({ accountId: id, session, devices })
-        }
-        return {
-          accounts: nextAccounts,
-          activeAccountId: id,
-          isLoading: false,
-          loginStep: 'idle'
-        }
+      const channel = await requestVerificationCode(region, phone)
+      set({
+        isLoading: false,
+        loginStep: 'verifyCode',
+        pendingAccount: phone,
+        pendingRegion: region,
+        pendingChannel: channel
       })
-      await get().saveToStorage()
     } catch (err) {
       set({ isLoading: false, error: (err as Error).message })
     }
@@ -134,7 +91,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false,
           loginStep: 'idle',
           pendingAccount: '',
-          pendingPassword: '',
           pendingChannel: null
         }
       })
@@ -176,7 +132,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({
       loginStep: 'idle',
       pendingAccount: '',
-      pendingPassword: '',
       pendingChannel: null,
       error: null
     })

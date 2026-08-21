@@ -1,8 +1,8 @@
 // ============================================================
-// LoginScreen —— 登录页面
+// LoginScreen —— 短信验证码登录
 // ============================================================
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   Text,
@@ -18,9 +18,11 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuthStore } from '../../store/auth'
 import type { BambuRegion } from '../../shared/types'
 
+const CODE_RESEND_SECONDS = 60
+
 const LoginScreen: React.FC = () => {
   const {
-    login,
+    loginWithSms,
     submitCode,
     resetLogin,
     isLoading,
@@ -29,24 +31,58 @@ const LoginScreen: React.FC = () => {
     pendingChannel
   } = useAuthStore()
 
-  const [account, setAccount] = useState('')
-  const [password, setPassword] = useState('')
+  const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [region, setRegion] = useState<BambuRegion>('cn')
+  const [countdown, setCountdown] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     resetLogin()
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
   }, [])
 
-  const handleLogin = async () => {
-    if (!account.trim() || !password.trim()) return
-    await login(account.trim(), password.trim(), region)
+  // 倒计时
+  useEffect(() => {
+    if (countdown <= 0) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      return
+    }
+    timerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current)
+          timerRef.current = null
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [loginStep === 'idle']) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSendCode = async () => {
+    if (!phone.trim()) return
+    await loginWithSms(phone.trim(), region)
+    setCountdown(CODE_RESEND_SECONDS)
   }
 
   const handleSubmitCode = async () => {
     if (!code.trim()) return
     await submitCode(code.trim())
   }
+
+  const codeSent = loginStep === 'verifyCode'
 
   return (
     <SafeAreaView style={styles.container}>
@@ -82,76 +118,78 @@ const LoginScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {loginStep === 'idle' || loginStep === 'credentials' ? (
-            /* Credential Form */
-            <View style={styles.form}>
-              <TextInput
-                style={styles.input}
-                placeholder="手机号或邮箱"
-                placeholderTextColor="#9e9e9e"
-                value={account}
-                onChangeText={setAccount}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="密码"
-                placeholderTextColor="#9e9e9e"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
+          {/* Phone Input */}
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              placeholder="手机号码"
+              placeholderTextColor="#9e9e9e"
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              maxLength={15}
+              editable={!codeSent}
+            />
 
-              {error && <Text style={styles.errorText}>{error}</Text>}
-
+            {/* Send Code Button */}
+            {!codeSent && (
               <TouchableOpacity
-                style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
-                onPress={handleLogin}
-                disabled={isLoading}
+                style={[
+                  styles.loginBtn,
+                  (!phone.trim() || isLoading || countdown > 0) && styles.loginBtnDisabled
+                ]}
+                onPress={handleSendCode}
+                disabled={!phone.trim() || isLoading || countdown > 0}
               >
                 {isLoading ? (
                   <ActivityIndicator color="#ffffff" />
                 ) : (
-                  <Text style={styles.loginBtnText}>登录</Text>
+                  <Text style={styles.loginBtnText}>
+                    {countdown > 0 ? `${countdown}s 后重新发送` : '获取验证码'}
+                  </Text>
                 )}
               </TouchableOpacity>
-            </View>
-          ) : (
-            /* Verify Code Form */
-            <View style={styles.form}>
-              <Text style={styles.codeHint}>
-                验证码已发送至{pendingChannel === 'email' ? '邮箱' : '手机'}
-              </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="输入验证码"
-                placeholderTextColor="#9e9e9e"
-                value={code}
-                onChangeText={setCode}
-                keyboardType="number-pad"
-                maxLength={6}
-              />
+            )}
 
-              {error && <Text style={styles.errorText}>{error}</Text>}
+            {/* Code Input */}
+            {codeSent && (
+              <>
+                <Text style={styles.codeHint}>
+                  验证码已发送至{pendingChannel === 'email' ? '邮箱' : '手机'}
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="输入验证码"
+                  placeholderTextColor="#9e9e9e"
+                  value={code}
+                  onChangeText={setCode}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                />
 
-              <TouchableOpacity
-                style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
-                onPress={handleSubmitCode}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Text style={styles.loginBtnText}>验证</Text>
-                )}
-              </TouchableOpacity>
+                {error && <Text style={styles.errorText}>{error}</Text>}
 
-              <TouchableOpacity onPress={resetLogin} style={styles.backBtn}>
-                <Text style={styles.backBtnText}>返回登录</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+                <TouchableOpacity
+                  style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
+                  onPress={handleSubmitCode}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <Text style={styles.loginBtnText}>登录</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={resetLogin} style={styles.backBtn}>
+                  <Text style={styles.backBtnText}>更换手机号</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {!codeSent && error && <Text style={styles.errorText}>{error}</Text>}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
