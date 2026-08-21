@@ -85,15 +85,23 @@ jobs:
       - name: Export IPA
         run: |
           cd ios
+          # Try xcodebuild export first
           xcodebuild -exportArchive \
             -archivePath ../build/BambooMobile.xcarchive \
             -exportOptionsPlist /tmp/ExportOptions.plist \
-            -exportPath ../build/output || {
-            echo "Export failed, uploading .xcarchive instead"
-            mkdir -p ../build/output
-            cp -r ../build/BambooMobile.xcarchive ../build/output/
-          }
-          cd ..
+            -exportPath ../build/output && exit 0
+
+          # Fallback: manually build unsigned IPA from .xcarchive
+          echo "xcodebuild export failed, building unsigned IPA manually..."
+          mkdir -p ../build/output/Payload
+          cp -r ../build/BambooMobile.xcarchive/Products/Applications/BambooMobile.app \
+                ../build/output/Payload/
+          cd ../build/output
+          zip -r -y BambooMobile.ipa Payload/
+          rm -rf Payload
+          echo "✅ Unsigned IPA created: BambooMobile.ipa"
+          cd ../..
+        shell: bash
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
