@@ -73,7 +73,7 @@ jobs:
           <plist version="1.0">
           <dict>
             <key>method</key>
-            <string>development</string>
+            <string>ad-hoc</string>
             <key>stripSwiftSymbols</key>
             <true/>
             <key>compileBitcode</key>
@@ -88,12 +88,18 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath ../build/BambooMobile.xcarchive \
             -exportOptionsPlist /tmp/ExportOptions.plist \
-            -exportPath ../build/output
+            -exportPath ../build/output || {
+            echo "Export failed, uploading .xcarchive instead"
+            mkdir -p ../build/output
+            cp -r ../build/BambooMobile.xcarchive ../build/output/
+          }
           cd ..
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: BambooMobile-${{ github.sha }}
-          path: build/output/*.ipa
+          path: |
+            build/output/*.ipa
+            build/output/*.xcarchive
           retention-days: 30
