@@ -1,0 +1,68 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Install CocoaPods
+        run: cd ios && pod install && cd ..
+
+      - name: Build IPA
+        run: |
+          # Archive
+          xcodebuild archive \
+            -project ios/BambooMobile.xcodeproj \
+            -scheme BambooMobile \
+            -configuration Release \
+            -archivePath build/BambooMobile.xcarchive \
+            -destination 'generic/platform=iOS' \
+            -allowProvisioningUpdates \
+            CODE_SIGNING_ALLOWED=NO
+
+          # Export IPA
+          cat > /tmp/ExportOptions.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath build/BambooMobile.xcarchive \
+            -exportOptionsPlist /tmp/ExportOptions.plist \
+            -exportPath build/output
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BambooMobile-${{ github.sha }}
+          path: build/output/*.ipa
+          retention-days: 30
