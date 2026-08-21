@@ -30,30 +30,34 @@ const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName={isLoggedIn ? 'DeviceList' : 'Login'}
         screenOptions={{
           headerStyle: { backgroundColor: '#ffffff' },
           headerTintColor: '#1976d2',
           headerTitleStyle: { fontWeight: '600' }
         }}
       >
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="DeviceList"
-          component={DeviceListScreen}
-          options={{ title: '拓竹打印管家' }}
-        />
-        <Stack.Screen
-          name="DeviceDetail"
-          component={DeviceDetailScreen}
-          options={({ route }) => ({
-            title: route.params.deviceName
-          })}
-        />
+        {isLoggedIn ? (
+          <>
+            <Stack.Screen
+              name="DeviceList"
+              component={DeviceListScreen}
+              options={{ title: '拓竹打印管家' }}
+            />
+            <Stack.Screen
+              name="DeviceDetail"
+              component={DeviceDetailScreen}
+              options={({ route }) => ({
+                title: route.params.deviceName
+              })}
+            />
+          </>
+        ) : (
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   )
