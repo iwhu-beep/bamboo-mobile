@@ -150,7 +150,8 @@ export function parsePushStatus(
   const next: PrinterState = isDiff ? { ...base } : { ...base, hms: [], ams: null }
 
   if (p['gcode_state'] !== undefined) {
-    next.state = STATE_MAP[str(p['gcode_state']).toUpperCase()] ?? base.state
+    const mappedState = STATE_MAP[str(p['gcode_state']).toUpperCase()]
+    next.state = mappedState ?? str(p['gcode_state']).toUpperCase() ?? 'IDLE'
   }
   if (p['mc_percent'] !== undefined) next.progress = num(p['mc_percent'])
   if (p['mc_remaining_time'] !== undefined) next.remainingTimeMin = num(p['mc_remaining_time'])
