@@ -12,10 +12,10 @@ interface PrinterStoreState {
   connected: boolean
   error: string | null
 
-  init: () => void
-  connect: (accountId: AccountId, session: BambuSession, devices: BambuDevice[]) => void
-  connectAll: () => void
-  disconnect: (accountId?: AccountId) => void
+  init: () => Promise<void>
+  connect: (accountId: AccountId, session: BambuSession, devices: BambuDevice[]) => Promise<void>
+  connectAll: () => Promise<void>
+  disconnect: (accountId?: AccountId) => Promise<void>
   refreshDevices: () => Promise<void>
 
   // 任务控制
@@ -33,7 +33,7 @@ export const usePrinterStore = create<PrinterStoreState>((set, get) => {
     connected: false,
     error: null,
 
-    init: () => {
+    init: async () => {
       if (initialized) return
       initialized = true
 
@@ -66,15 +66,15 @@ export const usePrinterStore = create<PrinterStoreState>((set, get) => {
         })
       }
 
-      // 启动后自动连接已有账号
-      setTimeout(() => get().connectAll(), 500)
+      // 启动后自动连接已有账号（不使用 setTimeout，直接等待）
+      await get().connectAll()
     },
 
-    connect: (accountId, session, devices) => {
+    connect: async (accountId, session, devices) => {
       set({ error: null })
       try {
         const mqtt = getMqttManager()
-        mqtt.connect(accountId, session, devices.map((d) => d.dev_id))
+        await mqtt.connect(accountId, session, devices.map((d) => d.dev_id))
         const states = mqtt.getStatesForAccount(accountId)
         set((prev) => ({
           states: { ...prev.states, [accountId]: states },
@@ -89,18 +89,18 @@ export const usePrinterStore = create<PrinterStoreState>((set, get) => {
     connectAll: async () => {
       const accounts = useAuthStore.getState().accounts
       for (const acc of accounts) {
-        get().connect(acc.accountId, acc.session, acc.devices ?? [])
+        await get().connect(acc.accountId, acc.session, acc.devices ?? [])
       }
     },
 
-    disconnect: (accountId) => {
+    disconnect: async (accountId) => {
       const mqtt = getMqttManager()
-      mqtt.disconnect(accountId)
+      await mqtt.disconnect(accountId)
       if (accountId) {
         set((prev) => {
           const states = { ...prev.states }
           delete states[accountId]
-          return { states, connected: false }
+          return { states, connected: Object.keys(states).length > 0 }
         })
       } else {
         set({ connected: false })
@@ -109,7 +109,9 @@ export const usePrinterStore = create<PrinterStoreState>((set, get) => {
 
     refreshDevices: async () => {
       try {
-        get().connectAll()
+        // 重置状态并强制重新连接
+        set({ states: {}, connected: false, error: null })
+        await get().connectAll()
       } catch (err) {
         set({ error: (err as Error).message })
         console.error('[printer] refreshDevices connectAll failed', err)
