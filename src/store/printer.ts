@@ -72,7 +72,6 @@ export const usePrinterStore = create<PrinterStoreState>((set, get) => {
 
     connect: (accountId, session, devices) => {
       set({ error: null })
-      if (devices.length === 0) return
       try {
         const mqtt = getMqttManager()
         mqtt.connect(accountId, session, devices.map((d) => d.dev_id))
@@ -83,15 +82,14 @@ export const usePrinterStore = create<PrinterStoreState>((set, get) => {
         }))
       } catch (err) {
         set({ error: (err as Error).message, connected: false })
+        console.error(`[mqtt] connect failed for account=${accountId}`, err)
       }
     },
 
     connectAll: async () => {
       const accounts = useAuthStore.getState().accounts
       for (const acc of accounts) {
-        if (acc.devices.length > 0) {
-          get().connect(acc.accountId, acc.session, acc.devices)
-        }
+        get().connect(acc.accountId, acc.session, acc.devices ?? [])
       }
     },
 
@@ -111,13 +109,10 @@ export const usePrinterStore = create<PrinterStoreState>((set, get) => {
 
     refreshDevices: async () => {
       try {
-        // 直接使用 auth store 中的 accounts
-        const authAccounts = useAuthStore.getState().accounts
-        if (authAccounts.some((a) => a.devices.length > 0)) {
-          get().connectAll()
-        }
+        get().connectAll()
       } catch (err) {
         set({ error: (err as Error).message })
+        console.error('[printer] refreshDevices connectAll failed', err)
       }
     },
 
